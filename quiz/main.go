@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 func main() {
 	csvFileName := flag.String("csv", "problems.csv", " a csv file in the format of 'question, answer'")
+	timeLimit := flag.Int("limit", 30, "the time limit for the quiz in seconds")
 	flag.Parse()
 
 	// open the csv file, use pointer * because flag.String returns a pointer to the value of the flag
@@ -27,19 +29,33 @@ func main() {
 	}
 	problems := parseLines(lines)
 
+	timer := time.NewTimer(time.Duration(*timeLimit) * time.Second)
+
 	correct := 0 // counter to keep track of number of correct answers
 
 	for i, p := range problems {
 		fmt.Printf("Problem #%d: %s = \n", i+1, p.question)
-		var answer string
-		//scan the input in the CLI and stores in the answer variable
-		//stops the printing of the next question and waits for input for answer to current question
-		fmt.Scanf("%s\n", &answer)
-		if answer == p.answer {
-			correct++
+
+		answerC := make(chan string) //make a channel answerC that receives string values
+		go func() {                  /*create goroutine such that the Scanf statement can run concurrently with the select statement
+			=> it won't be blocking; if timer runs out, the final score will print even if current answer is unanswered/not entered*/
+			var answer string
+			//scan the input in the CLI and stores in the answer variable
+			//stops the printing of the next question and waits for input for answer to current question
+			fmt.Scanf("%s\n", &answer)
+			answerC <- answer //send answer string to the answerC channel
+		}()
+
+		select {
+		case <-timer.C: //timer.C blocks on the timer's channel `C` until it sends a value indicating that the timer expired.
+			fmt.Printf("You scored %d out of %d.\n", correct, len(problems))
+			return
+		case answer := <-answerC: //case if answerC receives a value & initialize a variable named answer with that value
+			if answer == p.answer {
+				correct++
+			}
 		}
 	}
-
 	fmt.Printf("You scored %d out of %d.\n", correct, len(problems))
 }
 
